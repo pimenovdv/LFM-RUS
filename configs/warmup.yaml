@@ -1,0 +1,2 @@
+dataset_warmup: "IlyaGusev/ru_instruct"
+epochs_warmup: 1

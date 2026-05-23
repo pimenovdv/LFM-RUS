@@ -1,0 +1,2 @@
+dataset_sft: "IlyaGusev/ru_instruct"
+epochs_sft: 1
