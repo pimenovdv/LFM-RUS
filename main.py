@@ -5,6 +5,9 @@ import yaml
 import sys
 from lfm_rus.tokenizer import train_tokenizer
 from lfm_rus.lexical_init import initialize_lexical_embeddings
+from lfm_rus.pruning import prune_tokenizer_and_model
+from lfm_rus.embedding_warmup import embedding_warmup
+from datasets import load_dataset
 
 def create_axolotl_config(
     model_name_or_path: str,
@@ -70,7 +73,6 @@ def create_axolotl_config(
 
 def run_axolotl(config_path: str):
     print(f"Running Axolotl with config: {config_path}")
-    # This assumes axolotl is installed or available in the environment
     cmd = ["accelerate", "launch", "-m", "axolotl.cli.train", config_path]
     try:
         subprocess.run(cmd, check=True)
@@ -79,36 +81,52 @@ def run_axolotl(config_path: str):
         sys.exit(1)
     except FileNotFoundError:
         print(f"Error: Could not find 'accelerate' or 'axolotl'. Ensure they are installed.")
-        # For testing/demonstration purposes where axolotl might not be installed,
-        # we'll exit instead of crashing the pipeline silently.
         sys.exit(1)
 
+def get_warmup_texts(dataset_name, max_samples=10000):
+    try:
+        dataset = load_dataset(dataset_name, split="train")
+        texts = [item["text"] for item in dataset.select(range(min(len(dataset), max_samples)))]
+        return texts
+    except Exception as e:
+        print(f"Error loading dataset {dataset_name} for warmup: {e}")
+        return []
 
 @click.command()
+@click.option("--skip-pruning", is_flag=True, help="Skip tokenizer and model pruning.")
 @click.option("--skip-tokenizer", is_flag=True, help="Skip tokenizer training and lexical initialization.")
+@click.option("--skip-warmup", is_flag=True, help="Skip Embedding Warm-up.")
 @click.option("--skip-cpt", is_flag=True, help="Skip Continual Pre-Training (CPT).")
 @click.option("--skip-sft", is_flag=True, help="Skip Supervised Fine-Tuning (SFT).")
 @click.option("--model", default="gpt2", help="Base model to use (default: gpt2).")
 @click.option("--dataset-tokenizer", default="IlyaGusev/ru_instruct", help="Dataset for tokenizer training.")
+@click.option("--dataset-warmup", default="IlyaGusev/ru_instruct", help="Dataset for Embedding Warm-up.")
 @click.option("--dataset-cpt", default="IlyaGusev/ru_instruct", help="Dataset for CPT.")
 @click.option("--dataset-sft", default="IlyaGusev/ru_instruct", help="Dataset for SFT.")
 @click.option("--context-length", default=2048, type=int, help="Context length for training.")
 @click.option("--new-tokens", default=10000, type=int, help="Number of new tokens to add to the tokenizer.")
+@click.option("--tokens-to-prune", default="", help="Comma-separated list of tokens to prune.")
+@click.option("--epochs-warmup", default=1, type=int, help="Number of epochs for Warmup.")
 @click.option("--epochs-cpt", default=1, type=int, help="Number of epochs for CPT.")
 @click.option("--epochs-sft", default=1, type=int, help="Number of epochs for SFT.")
 @click.option("--batch-size", default=4, type=int, help="Batch size for training.")
 @click.option("--learning-rate", default=2e-5, type=float, help="Learning rate for training.")
 @click.option("--output-dir", default="./output", help="Output directory for models.")
 def main(
+    skip_pruning: bool,
     skip_tokenizer: bool,
+    skip_warmup: bool,
     skip_cpt: bool,
     skip_sft: bool,
     model: str,
     dataset_tokenizer: str,
+    dataset_warmup: str,
     dataset_cpt: str,
     dataset_sft: str,
     context_length: int,
     new_tokens: int,
+    tokens_to_prune: str,
+    epochs_warmup: int,
     epochs_cpt: int,
     epochs_sft: int,
     batch_size: int,
@@ -125,6 +143,25 @@ def main(
     os.makedirs(output_dir, exist_ok=True)
 
     current_model = model
+    added_tokens = []
+
+    # 0. Pruning
+    if not skip_pruning:
+        print("\n--- Stage 0: Pruning ---")
+        prune_list = [t.strip() for t in tokens_to_prune.split(",") if t.strip()]
+        if prune_list:
+            print(f"Pruning tokens: {prune_list}")
+            prune_output_dir = os.path.join(output_dir, "model_pruned")
+            prune_tokenizer_and_model(
+                model_name=current_model,
+                tokens_to_remove=prune_list,
+                save_path=prune_output_dir
+            )
+            current_model = prune_output_dir
+        else:
+            print("No tokens to prune provided. Skipping pruning.")
+    else:
+        print("\n--- Skipping Stage 0: Pruning ---")
 
     # 1. Tokenizer Training
     if not skip_tokenizer:
@@ -147,6 +184,28 @@ def main(
         current_model = tokenizer_output_dir
     else:
         print("\n--- Skipping Stage 1: Tokenizer Training ---")
+
+    # 1.5 Embedding Warm-up
+    if not skip_warmup:
+        print("\n--- Stage 1.5: Embedding Warm-up ---")
+        warmup_output_dir = os.path.join(output_dir, "model_warmup")
+        print(f"Fetching texts for warmup from {dataset_warmup}...")
+        texts = get_warmup_texts(dataset_warmup)
+        if texts:
+            embedding_warmup(
+                model_name_or_path=current_model,
+                texts=texts,
+                new_tokens=added_tokens,
+                epochs=epochs_warmup,
+                batch_size=batch_size,
+                lr=learning_rate,
+                save_path=warmup_output_dir
+            )
+            current_model = warmup_output_dir
+        else:
+            print("No texts found for warmup. Skipping Embedding Warm-up.")
+    else:
+        print("\n--- Skipping Stage 1.5: Embedding Warm-up ---")
 
     # 2. Continual Pre-Training (CPT)
     if not skip_cpt:
