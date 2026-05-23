@@ -9,68 +9,6 @@ from lfm_rus.pruning import prune_tokenizer_and_model
 from lfm_rus.embedding_warmup import embedding_warmup
 from datasets import load_dataset
 
-def create_axolotl_config(
-    model_name_or_path: str,
-    dataset: str,
-    output_dir: str,
-    context_length: int,
-    epochs: int,
-    batch_size: int,
-    learning_rate: float,
-    is_sft: bool = False
-) -> dict:
-    dataset_config = {
-        "path": dataset,
-        "type": "completion" if not is_sft else "alpaca"
-    }
-
-    config = {
-        "base_model": model_name_or_path,
-        "model_type": "AutoModelForCausalLM",
-        "tokenizer_type": "AutoTokenizer",
-        "load_in_8bit": False,
-        "load_in_4bit": False,
-        "strict": False,
-        "datasets": [dataset_config],
-        "dataset_prepared_path": os.path.join(output_dir, "data_prepared"),
-        "val_set_size": 0.05,
-        "output_dir": output_dir,
-        "sequence_len": context_length,
-        "sample_packing": True,
-        "pad_to_sequence_len": True,
-        "wandb_project": "lfm-rus" if os.environ.get("WANDB_API_KEY") else "",
-        "gradient_accumulation_steps": 4,
-        "micro_batch_size": batch_size,
-        "num_epochs": epochs,
-        "optimizer": "adamw_bnb_8bit",
-        "lr_scheduler": "cosine",
-        "learning_rate": learning_rate,
-        "train_on_inputs": False,
-        "group_by_length": False,
-        "bf16": True,
-        "fp16": False,
-        "tf32": False,
-        "gradient_checkpointing": True,
-        "early_stopping_patience": None,
-        "resume_from_checkpoint": None,
-        "local_rank": None,
-        "logging_steps": 1,
-        "xformers_attention": False,
-        "flash_attention": True,
-        "warmup_steps": 10,
-        "evals_per_epoch": 4,
-        "saves_per_epoch": 1,
-        "debug": False,
-        "deepspeed": None,
-        "weight_decay": 0.0,
-        "fsdp": [],
-        "fsdp_config": None,
-        "special_tokens": {
-            "pad_token": "<|endoftext|>"
-        }
-    }
-    return config
-
 def run_axolotl(config_path: str):
     print(f"Running Axolotl with config: {config_path}")
     cmd = ["accelerate", "launch", "-m", "axolotl.cli.train", config_path]
@@ -148,7 +86,7 @@ def run_warmup(pipeline_config: dict, stage_config: dict):
     print("\n--- Stage 1.5: Embedding Warm-up ---")
     current_model = pipeline_config.get("model", "gpt2")
     output_dir = pipeline_config.get("output_dir", "./output")
-    batch_size = pipeline_config.get("batch_size", 4)
+    batch_size = pipeline_config.get("micro_batch_size", 4)
     learning_rate = pipeline_config.get("learning_rate", 2e-5)
 
     dataset_warmup = stage_config.get("dataset_warmup", "IlyaGusev/ru_instruct")
@@ -175,32 +113,31 @@ def run_warmup(pipeline_config: dict, stage_config: dict):
         print("No texts found for warmup. Skipping Embedding Warm-up.")
         return current_model
 
-def run_axolotl_stage(pipeline_config: dict, stage_config: dict, stage_name: str, is_sft: bool):
+def run_axolotl_stage(pipeline_config: dict, stage_config: dict, stage_name: str):
     print(f"\n--- Stage: {stage_name} ---")
     current_model = pipeline_config.get("model", "gpt2")
     output_dir = pipeline_config.get("output_dir", "./output")
-    context_length = pipeline_config.get("context_length", 2048)
-    batch_size = pipeline_config.get("batch_size", 4)
-    learning_rate = pipeline_config.get("learning_rate", 2e-5)
 
     stage_output_dir = os.path.join(output_dir, f"model_{stage_name.lower()}")
 
-    dataset_key = f"dataset_{stage_name.lower()}"
-    epochs_key = f"epochs_{stage_name.lower()}"
+    # Base configuration derived from pipeline_config
+    axolotl_config = {}
 
-    dataset = stage_config.get(dataset_key, "IlyaGusev/ru_instruct")
-    epochs = stage_config.get(epochs_key, 1)
+    # Pipeline-specific keys to exclude from axolotl config
+    orchestration_keys = {"stages", "model", "output_dir", "added_tokens"}
 
-    axolotl_config = create_axolotl_config(
-        model_name_or_path=current_model,
-        dataset=dataset,
-        output_dir=stage_output_dir,
-        context_length=context_length,
-        epochs=epochs,
-        batch_size=batch_size,
-        learning_rate=learning_rate,
-        is_sft=is_sft
-    )
+    for key, value in pipeline_config.items():
+        if key not in orchestration_keys:
+            axolotl_config[key] = value
+
+    # Apply stage config (overwrites global if duplicate)
+    axolotl_config.update(stage_config)
+
+    # Ensure inputs/outputs are set correctly based on pipeline context
+    axolotl_config["base_model"] = current_model
+    axolotl_config["output_dir"] = stage_output_dir
+    if "dataset_prepared_path" not in axolotl_config:
+        axolotl_config["dataset_prepared_path"] = os.path.join(output_dir, f"data_prepared_{stage_name.lower()}")
 
     config_path = os.path.join(output_dir, f"{stage_name.lower()}_config.yml")
     with open(config_path, "w") as f:
@@ -241,8 +178,8 @@ def main(config: str):
         "pruning": run_pruning,
         "tokenizer": run_tokenizer,
         "warmup": run_warmup,
-        "cpt": lambda pc, sc: run_axolotl_stage(pc, sc, "CPT", False),
-        "sft": lambda pc, sc: run_axolotl_stage(pc, sc, "SFT", True)
+        "cpt": lambda pc, sc: run_axolotl_stage(pc, sc, "CPT"),
+        "sft": lambda pc, sc: run_axolotl_stage(pc, sc, "SFT")
     }
 
     # config directory

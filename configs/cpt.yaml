@@ -1,2 +1,29 @@
-dataset_cpt: "IlyaGusev/ru_instruct"
-epochs_cpt: 1
+model_type: AutoModelForCausalLM
+tokenizer_type: AutoTokenizer
+trust_remote_code: true
+load_in_8bit: false
+load_in_4bit: false
+strict: false
+datasets:
+  - path: json
+    data_files: ./data/ru_wikipedia_cleaned.jsonl
+    type: pretrain
+val_set_size: 0
+sample_packing: true
+pad_to_sequence_len: true
+num_epochs: 1
+gradient_accumulation_steps: 8
+optimizer: adamw_torch_fused
+lr_scheduler: cosine
+weight_decay: 0.1
+warmup_ratio: 0.02
+bf16: auto
+fp16: false
+tf32: true
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+logging_steps: 10
+save_steps: 1000
+save_strategy: steps
+deepspeed: deepspeed_configs/zero2.json
