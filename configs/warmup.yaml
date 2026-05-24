@@ -1,4 +1,5 @@
-dataset_warmup: "IlyaGusev/ru_instruct"
+dataset_warmup:
+  - path: "IlyaGusev/habr"
 epochs_warmup: 1
 batch_size: 4
 learning_rate: 2e-5

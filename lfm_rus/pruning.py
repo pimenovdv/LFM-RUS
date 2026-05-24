@@ -10,7 +10,7 @@ import tempfile
 
 def prune_tokenizer_and_model(
     model_name: str,
-    datasets: list[str],
+    datasets: list[dict],
     save_path: str,
     min_freq: int = 100,
     max_samples: int = 500000
@@ -24,14 +24,18 @@ def prune_tokenizer_and_model(
 
     print("2. Counting token frequencies...")
     token_counts = Counter()
-    for ds_name in datasets:
-        print(f"Loading dataset: {ds_name}")
-        dataset = load_dataset(ds_name, split="train")
+    for ds_config in datasets:
+        ds_path = ds_config["path"]
+        ds_name = ds_config.get("name")
+        print(f"Loading dataset: {ds_path} (name={ds_name})")
+        if ds_name:
+            dataset = load_dataset(ds_path, name=ds_name, split="train", streaming=True)
+        else:
+            dataset = load_dataset(ds_path, split="train", streaming=True)
 
-        limit = min(len(dataset), max_samples)
-        subset = dataset.select(range(limit))
+        subset = dataset.take(max_samples)
 
-        for item in tqdm(subset, desc=f"Processing {ds_name}"):
+        for item in tqdm(subset, desc=f"Processing {ds_path}"):
             text = item.get("text", "")
             if text:
                 ids = tokenizer.encode(text, add_special_tokens=False)

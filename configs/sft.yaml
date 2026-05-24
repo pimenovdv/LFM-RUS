@@ -4,9 +4,17 @@ trust_remote_code: true
 chat_template: chatml
 train_on_inputs: false
 datasets:
-  - path: json
-    data_files: ./data/sft_data_ru.jsonl
-    type: sharegpt
+  - path: "IlyaGusev/ru_sharegpt_cleaned"
+    type: "sharegpt"
+  - path: "Vikhrmodels/GrandMaster-PRO-MAX"
+    type: "sharegpt"
+  - path: "Vikhrmodels/OpenHermes-2.5-ru"
+    type: "sharegpt"
+  - path: "CohereForAI/aya_dataset"
+    name: "rus"
+    type: "sharegpt"
+  - path: "IlyaGusev/saiga_scored"
+    type: "sharegpt"
 learning_rate: 1.0e-05
 num_epochs: 2
 micro_batch_size: 2

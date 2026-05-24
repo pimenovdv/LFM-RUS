@@ -22,14 +22,22 @@ def run_axolotl(config_path: str):
         print(f"Error: Could not find 'accelerate' or 'axolotl'. Ensure they are installed.")
         sys.exit(1)
 
-def get_warmup_texts(dataset_name, max_samples=10000):
-    try:
-        dataset = load_dataset(dataset_name, split="train")
-        texts = [item["text"] for item in dataset.select(range(min(len(dataset), max_samples)))]
-        return texts
-    except Exception as e:
-        print(f"Error loading dataset {dataset_name} for warmup: {e}")
-        return []
+def get_warmup_texts(datasets_list, max_samples=10000):
+    texts = []
+    for ds_config in datasets_list:
+        try:
+            ds_path = ds_config["path"]
+            ds_name = ds_config.get("name")
+            if ds_name:
+                dataset = load_dataset(ds_path, name=ds_name, split="train", streaming=True)
+            else:
+                dataset = load_dataset(ds_path, split="train", streaming=True)
+
+            subset = dataset.take(max_samples)
+            texts.extend([item["text"] for item in subset])
+        except Exception as e:
+            print(f"Error loading dataset {ds_config} for warmup: {e}")
+    return texts
 
 @click.command()
 @click.option("--config", default="pipeline.yaml", help="Path to pipeline configuration YAML file.")
@@ -91,13 +99,13 @@ def main(config: str):
 
         elif stage == "tokenizer":
             print("\n--- Stage 1: Tokenizer Training & Lexical Initialization ---")
-            dataset_tokenizer = stage_config.get("dataset_tokenizer", "IlyaGusev/ru_instruct")
+            dataset_tokenizer = stage_config.get("dataset_tokenizer", [{"path": "IlyaGusev/ru_instruct"}])
             new_tokens = stage_config.get("new_tokens", 10000)
 
             print(f"Training tokenizer on dataset: {dataset_tokenizer}")
             added_tokens, tokenizer = train_tokenizer(
                 base_model_name=current_model,
-                dataset_name=dataset_tokenizer,
+                datasets=dataset_tokenizer,
                 new_tokens=new_tokens
             )
             print(f"Added {len(added_tokens)} new tokens.")
@@ -113,7 +121,7 @@ def main(config: str):
 
         elif stage == "warmup":
             print("\n--- Stage 1.5: Embedding Warm-up ---")
-            dataset_warmup = stage_config.get("dataset_warmup", "IlyaGusev/ru_instruct")
+            dataset_warmup = stage_config.get("dataset_warmup", [{"path": "IlyaGusev/ru_instruct"}])
             epochs_warmup = stage_config.get("epochs_warmup", 1)
             batch_size = stage_config.get("batch_size", 4)
             learning_rate = stage_config.get("learning_rate", 2e-5)

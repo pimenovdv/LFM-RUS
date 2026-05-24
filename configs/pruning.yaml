@@ -1,4 +1,8 @@
 datasets:
-  - "IlyaGusev/ru_instruct"
+  - path: "uonlp/CulturaX"
+    name: "ru"
+  - path: "HuggingFaceFW/fineweb-edu"
+    name: "sample-10BT"
+  - path: "bigcode/starcoderdata"
 min_freq: 100
 max_samples: 50000
