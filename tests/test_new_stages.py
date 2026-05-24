@@ -1,34 +1,56 @@
 import pytest
 import os
 import torch
+from unittest.mock import patch
+from datasets import Dataset
 from lfm_rus.pruning import prune_tokenizer_and_model
 from lfm_rus.embedding_warmup import embedding_warmup
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import tempfile
 
-def test_pruning():
-    # Use a small fast model
+@patch('lfm_rus.pruning.load_dataset')
+def test_pruning(mock_load_dataset):
+    # Setup dummy dataset
+    # "apple" appears 1 time, "banana" appears 2 times, "hello" appears 3 times
+    # In GPT2, " apple" (or similar), depends on the tokenization
+    # Let's just create some text. We will set min_freq=2, so rare words are dropped
+
+    # Let's use words that are single tokens in gpt2
+    # 'hello': 31373
+    # 'world': 6894
+    # 'apple': 17180
+
+    # Let's just pass text and see what gets pruned.
+    # We'll make it so "apple" has freq 1, "hello" has freq 2.
+    dummy_data = {
+        "text": ["hello world apple", "hello world banana", "world world world"]
+    }
+    dummy_dataset = Dataset.from_dict(dummy_data)
+    mock_load_dataset.return_value = dummy_dataset
+
     model_name = "gpt2"
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Before pruning
         base_tokenizer = AutoTokenizer.from_pretrained(model_name)
         base_size = len(base_tokenizer)
 
-        # We will prune the word 'hello'
-        tokens_to_prune = ["hello"]
+        # We will prune tokens that appear less than 2 times
+        # Wait, if we use a small dataset, ALL OTHER TOKENS in vocab (50k) will have freq 0 and be dropped.
+        # This will test pruning very well, reducing vocab size drastically!
 
         model, tokenizer = prune_tokenizer_and_model(
             model_name=model_name,
-            tokens_to_remove=tokens_to_prune,
+            datasets=["dummy"],
+            min_freq=1,
+            max_samples=10,
             save_path=tmpdir
         )
 
-        # Verify vocab size
-        assert len(tokenizer) == base_size - 1
-        assert "hello" not in tokenizer.get_vocab()
+        # New vocab should be extremely small (special tokens + tokens in our dummy data)
+        assert len(tokenizer) < 1000
+        assert len(tokenizer) > 0
 
-        # Verify model embeddings
-        assert model.get_input_embeddings().weight.shape[0] == base_size - 1
+        # Model embeddings should match the new small vocab
+        assert model.get_input_embeddings().weight.shape[0] == len(tokenizer)
 
 def test_embedding_warmup():
     model_name = "gpt2"

@@ -72,19 +72,22 @@ def main(config: str):
 
         if stage == "pruning":
             print("\n--- Stage 0: Pruning ---")
-            tokens_to_prune = stage_config.get("tokens_to_prune", "")
-            prune_list = [t.strip() for t in tokens_to_prune.split(",") if t.strip()]
-            if prune_list:
-                print(f"Pruning tokens: {prune_list}")
+            datasets = stage_config.get("datasets", [])
+            min_freq = stage_config.get("min_freq", 100)
+            max_samples = stage_config.get("max_samples", 500000)
+            if datasets:
+                print(f"Pruning using datasets: {datasets}")
                 prune_output_dir = os.path.join(output_dir, "model_pruned")
                 prune_tokenizer_and_model(
                     model_name=current_model,
-                    tokens_to_remove=prune_list,
+                    datasets=datasets,
+                    min_freq=min_freq,
+                    max_samples=max_samples,
                     save_path=prune_output_dir
                 )
                 current_model = prune_output_dir
             else:
-                print("No tokens to prune provided. Skipping pruning.")
+                print("No datasets for pruning provided. Skipping pruning.")
 
         elif stage == "tokenizer":
             print("\n--- Stage 1: Tokenizer Training & Lexical Initialization ---")
