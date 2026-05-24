@@ -29,9 +29,15 @@ def get_warmup_texts(datasets_list, max_samples=10000):
             ds_path = ds_config["path"]
             ds_name = ds_config.get("name")
             if ds_name:
-                dataset = load_dataset(ds_path, name=ds_name, split="train", streaming=True)
+                try:
+                    dataset = load_dataset(ds_path, name=ds_name, split="train", streaming=True, **{k:v for k,v in ds_config.items() if k not in ["path", "name"]})
+                except ValueError:
+                    dataset = load_dataset(ds_path, name=ds_name, streaming=True, **{k:v for k,v in ds_config.items() if k not in ["path", "name"]})
             else:
-                dataset = load_dataset(ds_path, split="train", streaming=True)
+                try:
+                    dataset = load_dataset(ds_path, split="train", streaming=True, **{k:v for k,v in ds_config.items() if k not in ["path", "name"]})
+                except ValueError:
+                    dataset = load_dataset(ds_path, streaming=True, **{k:v for k,v in ds_config.items() if k not in ["path", "name"]})
 
             subset = dataset.take(max_samples)
             texts.extend([item["text"] for item in subset])
@@ -64,7 +70,8 @@ def main(config: str):
     added_tokens = []
 
     for stage in stages:
-        stage_config_path = f"configs/{stage}.yaml"
+        configs_dir = pipeline_config.get("configs_dir", "configs")
+        stage_config_path = f"{configs_dir}/{stage}.yaml"
         if os.path.exists(stage_config_path):
             with open(stage_config_path, "r") as f:
                 stage_config = yaml.safe_load(f)
