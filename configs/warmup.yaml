@@ -1,0 +1,4 @@
+dataset_warmup: "IlyaGusev/ru_instruct"
+epochs_warmup: 1
+batch_size: 4
+learning_rate: 2e-5

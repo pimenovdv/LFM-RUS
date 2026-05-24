@@ -1,0 +1,10 @@
+model: LiquidAI/LFM2.5-350M
+output_dir: ./output
+max_len: 2048
+push_to_hub: false
+stages:
+  - pruning
+  - tokenizer
+  - warmup
+  - cpt
+  - sft
