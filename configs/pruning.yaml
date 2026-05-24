@@ -1,1 +1,4 @@
-tokens_to_prune: ""
+datasets:
+  - "IlyaGusev/ru_instruct"
+min_freq: 100
+max_samples: 50000
