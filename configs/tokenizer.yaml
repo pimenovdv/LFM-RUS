@@ -1,0 +1,2 @@
+dataset_tokenizer: "IlyaGusev/ru_instruct"
+new_tokens: 10000

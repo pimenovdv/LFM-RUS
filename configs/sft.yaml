@@ -1,0 +1,17 @@
+model_type: AutoModelForCausalLM
+tokenizer_type: AutoTokenizer
+trust_remote_code: true
+chat_template: chatml
+train_on_inputs: false
+datasets:
+  - path: json
+    data_files: ./data/sft_data_ru.jsonl
+    type: sharegpt
+learning_rate: 1.0e-05
+num_epochs: 2
+micro_batch_size: 2
+gradient_accumulation_steps: 8
+sample_packing: true
+bf16: auto
+gradient_checkpointing: true
+deepspeed: deepspeed_configs/zero2.json
