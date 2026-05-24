@@ -29,9 +29,19 @@ def prune_tokenizer_and_model(
         ds_name = ds_config.get("name")
         print(f"Loading dataset: {ds_path} (name={ds_name})")
         if ds_name:
-            dataset = load_dataset(ds_path, name=ds_name, split="train", streaming=True)
+            try:
+                dataset = load_dataset(ds_path, name=ds_name, split="train", streaming=True, **{k:v for k,v in ds_config.items() if k not in ["path", "name"]})
+            except ValueError:
+                dataset = load_dataset(ds_path, name=ds_name, split="test", streaming=True, **{k:v for k,v in ds_config.items() if k not in ["path", "name"]})
+            except Exception:
+                dataset = load_dataset(ds_path, name=ds_name, streaming=True, **{k:v for k,v in ds_config.items() if k not in ["path", "name"]})
         else:
-            dataset = load_dataset(ds_path, split="train", streaming=True)
+            try:
+                dataset = load_dataset(ds_path, split="train", streaming=True, **{k:v for k,v in ds_config.items() if k not in ["path", "name"]})
+            except ValueError:
+                dataset = load_dataset(ds_path, split="test", streaming=True, **{k:v for k,v in ds_config.items() if k not in ["path", "name"]})
+            except Exception:
+                dataset = load_dataset(ds_path, streaming=True, **{k:v for k,v in ds_config.items() if k not in ["path", "name"]})
 
         subset = dataset.take(max_samples)
 
