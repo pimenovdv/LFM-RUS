@@ -1,2 +1,6 @@
-dataset_tokenizer: "IlyaGusev/ru_instruct"
+dataset_tokenizer:
+  - path: "wikimedia/wikipedia"
+    name: "20231101.ru"
+  - path: "IlyaGusev/habr"
+  - path: "d0rj/rutib"
 new_tokens: 10000

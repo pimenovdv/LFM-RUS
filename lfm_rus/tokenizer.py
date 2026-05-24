@@ -3,23 +3,37 @@ from transformers import AutoTokenizer, PreTrainedTokenizerFast
 from datasets import load_dataset
 from typing import List, Generator, Tuple, Union
 
-def get_training_corpus(dataset, batch_size: int = 1000) -> Generator[List[str], None, None]:
-    for i in range(0, len(dataset), batch_size):
-        yield [item["text"] for item in dataset[i : i + batch_size]]
+def get_training_corpus(datasets_list: List[dict], max_samples: int = 50000) -> Generator[List[str], None, None]:
+    for ds_config in datasets_list:
+        ds_path = ds_config["path"]
+        ds_name = ds_config.get("name")
+        if ds_name:
+            dataset = load_dataset(ds_path, name=ds_name, split="train", streaming=True)
+        else:
+            dataset = load_dataset(ds_path, split="train", streaming=True)
 
-def train_tokenizer(base_model_name: str, dataset_name: str, vocab_size: int = 50257, new_tokens: int = 10000) -> Tuple[List[str], Union[AutoTokenizer, PreTrainedTokenizerFast]]:
+        subset = dataset.take(max_samples)
+
+        # yield chunks of texts
+        batch_size = 1000
+        batch = []
+        for item in subset:
+            batch.append(item["text"])
+            if len(batch) == batch_size:
+                yield batch
+                batch = []
+        if batch:
+            yield batch
+
+def train_tokenizer(base_model_name: str, datasets: List[dict], vocab_size: int = 50257, new_tokens: int = 10000) -> Tuple[List[str], Union[AutoTokenizer, PreTrainedTokenizerFast]]:
     """
     Trains a new tokenizer from a base tokenizer on a specific dataset.
     Returns the list of newly added tokens.
     """
     base_tokenizer = AutoTokenizer.from_pretrained(base_model_name)
 
-    # Load dataset. E.g., IlyaGusev/ru_instruct or wikipedia
-    # Note: We use a small portion for demonstration/fast training if this runs in test
-    dataset = load_dataset(dataset_name, split="train")
-
     # create generator
-    training_corpus = get_training_corpus(dataset)
+    training_corpus = get_training_corpus(datasets)
 
     # Check original vocab size to handle models like gpt2 properly
     orig_vocab_size = len(base_tokenizer)
@@ -46,5 +60,5 @@ def train_tokenizer(base_model_name: str, dataset_name: str, vocab_size: int = 5
 
 if __name__ == "__main__":
     # Example usage
-    added, tokenizer = train_tokenizer("gpt2", "IlyaGusev/ru_instruct", vocab_size=50257, new_tokens=5000)
+    added, tokenizer = train_tokenizer("gpt2", [{"path": "IlyaGusev/ru_instruct"}], vocab_size=50257, new_tokens=5000)
     print(f"Added {len(added)} tokens. Sample: {added[:10]}")

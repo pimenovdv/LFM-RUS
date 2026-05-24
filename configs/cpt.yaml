@@ -5,15 +5,16 @@ load_in_8bit: false
 load_in_4bit: false
 strict: false
 datasets:
-  - path: json
-    data_files: ./data/ru_wikipedia_cleaned.jsonl
-    type: pretrain
-  - path: json
-    data_files: ./data/en_fineweb_anchor.jsonl
-    type: pretrain
-  - path: json
-    data_files: ./data/code_stack_anchor.jsonl
-    type: pretrain
+  - path: "uonlp/CulturaX"
+    name: "ru"
+    type: "pretrain"
+  - path: "IlyaGusev/habr"
+    type: "pretrain"
+  - path: "Kolesh/Taiga"
+    type: "pretrain"
+  - path: "HuggingFaceFW/fineweb-edu"
+    name: "sample-10BT"
+    type: "pretrain"
 dataset_prepared_path: ./data_prepared_cpt
 val_set_size: 0
 sample_packing: true
